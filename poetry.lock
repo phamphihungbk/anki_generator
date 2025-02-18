@@ -385,6 +385,20 @@ files = [
 ]
 
 [[package]]
+name = "python-markdown-math"
+version = "0.8"
+description = "Math extension for Python-Markdown"
+optional = false
+python-versions = ">=3.6"
+files = [
+    {file = "python-markdown-math-0.8.tar.gz", hash = "sha256:8564212af679fc18d53f38681f16080fcd3d186073f23825c7ce86fadd3e3635"},
+    {file = "python_markdown_math-0.8-py3-none-any.whl", hash = "sha256:c685249d84b5b697e9114d7beb352bd8ca2e07fd268fd4057ffca888c14641e5"},
+]
+
+[package.dependencies]
+Markdown = ">=3.0"
+
+[[package]]
 name = "pyyaml"
 version = "6.0.2"
 description = "YAML parser and emitter for Python"
@@ -607,4 +621,4 @@ h11 = ">=0.9.0,<1"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.13"
-content-hash = "a06a96464dfe9ef62c60127d9bab5cbd9c56cc91a661d15f05c93d8ab20b96c5"
+content-hash = "47951aa042b68de5dd370352426d5644be7bb1c09a5204011dce959fbe78c9f9"

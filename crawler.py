@@ -52,7 +52,7 @@ class LeetCodeCrawler:
                     lambda driver: driver.current_url.find("login") < 0
                 )
                 # wait for 2FA
-                time.sleep(20)
+                time.sleep(10)
                 browser_cookies = self.browser.get_cookies()
                 with open(COOKIE_PATH, 'wb') as f:
                     pickle.dump(browser_cookies, f)
@@ -112,7 +112,7 @@ class LeetCodeCrawler:
     
         # Fetch all question slugs from the page
         question_slugs = self.fetch_problem_list(problem_list_url)
-
+        
         response = self.session.get("https://leetcode.com/api/problems/all/")
         all_problems = json.loads(response.content.decode('utf-8'))
         # filter AC problems
@@ -120,7 +120,7 @@ class LeetCodeCrawler:
         for item in all_problems['stat_status_pairs']:
             if item['status'] == 'ac':
                 id, slug = destructure(item['stat'], "question_id", "question__title_slug")
-                if slug not in question_slugs:
+                if slug not in set(question_slugs):
                     continue
 
                 # only update problem if not exists
