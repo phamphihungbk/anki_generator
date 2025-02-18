@@ -3,6 +3,7 @@ import os.path
 import pickle
 import re
 from sys import exit
+import time
 
 import requests
 from requests.cookies import RequestsCookieJar
@@ -21,7 +22,7 @@ class LeetCodeCrawler:
     def __init__(self):
         # create an http session
         self.session = requests.Session()
-        self.browser = webdriver.Chrome(executable_path="./vendor/chromedriver")
+        self.browser = webdriver.Chrome(service=webdriver.ChromeService(executable_path="./driver/chromedriver"))
         self.session.headers.update(
             {
                 'Host': 'leetcode.com',
@@ -50,6 +51,8 @@ class LeetCodeCrawler:
                 WebDriverWait(self.browser, 24 * 60 * 3600).until(
                     lambda driver: driver.current_url.find("login") < 0
                 )
+                # wait for 2FA
+                time.sleep(20)
                 browser_cookies = self.browser.get_cookies()
                 with open(COOKIE_PATH, 'wb') as f:
                     pickle.dump(browser_cookies, f)
@@ -70,7 +73,46 @@ class LeetCodeCrawler:
 
         self.session.cookies.update(cookies)
 
+    def fetch_problem_list(self, url):
+        self.browser.get(url)
+
+        # Wait until at least one problem link is visible
+        try:
+            WebDriverWait(self.browser, 20).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "a[href^='/problems/']"))
+            )
+        except Exception as e:
+            print(f"❌ Timeout error: Could not find problems. Check the website structure: {e}")
+            return []
+
+        # Scroll down to load all problems
+        last_height = self.browser.execute_script("return document.body.scrollHeight")
+        
+        while True:
+            self.browser.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(2)  # Wait for new questions to load
+            
+            new_height = self.browser.execute_script("return document.body.scrollHeight")
+            if new_height == last_height:
+                break  # Stop when no more content is loading
+            last_height = new_height
+
+        # Get all question elements
+        question_elements = self.browser.find_elements(By.CSS_SELECTOR, "a[href^='/problems/']")
+        
+        # Extract slugs from href attributes
+        slugs = [elem.get_attribute("href").split("/problems/")[1].split("?")[0] for elem in question_elements]
+        
+        print(f"✅ Found {len(slugs)} questions from the problem list!")
+        return slugs
+
     def fetch_accepted_problems(self):
+        # URL of the problem list
+        problem_list_url = "https://leetcode.com/problem-list/2x3zd082/"
+    
+        # Fetch all question slugs from the page
+        question_slugs = self.fetch_problem_list(problem_list_url)
+
         response = self.session.get("https://leetcode.com/api/problems/all/")
         all_problems = json.loads(response.content.decode('utf-8'))
         # filter AC problems
@@ -78,6 +120,9 @@ class LeetCodeCrawler:
         for item in all_problems['stat_status_pairs']:
             if item['status'] == 'ac':
                 id, slug = destructure(item['stat'], "question_id", "question__title_slug")
+                if slug not in question_slugs:
+                    continue
+
                 # only update problem if not exists
                 if Problem.get_or_none(Problem.id == id) is None:
                     counter += 1
@@ -236,7 +281,7 @@ class LeetCodeCrawler:
                     url = sub['url']
                     self.browser.get(f'https://leetcode.com{url}')
                     element = WebDriverWait(self.browser, 10).until(
-                        EC.presence_of_element_located((By.ID, "result_date"))  # 用实际等待元素的ID替换"someId"
+                        EC.presence_of_element_located((By.ID, "result_date"))  # Replace "someId" with the ID of the actual element you are waiting for
                     )
                     html = self.browser.page_source
                     pattern = re.compile(
