@@ -1,0 +1,17 @@
+# .gitignore
+
+# Ignore Python build artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Ignore Python distribution artifacts
+dist/
+build/
+*.egg-info/
+
+# Ignore Python virtual environments
+venv/
+cookies.dat
+cookies_cn.dat
