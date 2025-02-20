@@ -1,3 +1,4 @@
+from datetime import datetime
 import json
 import os.path
 import pickle
@@ -12,7 +13,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 
-from database import Problem, ProblemTag, Tag, Submission, create_tables, Solution
+from database import Problem, ProblemTag, Tag, Submission, create_tables, Solution, FavouriteQuestionList
 from utils import destructure, random_wait, do, get
 
 COOKIE_PATH = "./cookies.dat"
@@ -75,7 +76,95 @@ class LeetCodeCrawler:
 
         self.session.cookies.update(cookies)
 
-    def fetch_accepted_problems(self):    
+    def fetch_favourite_problems(self, favorite_slug, skip = 0, limit = 200):
+        favorite_quesions = FavouriteQuestionList.select()
+        if len(favorite_quesions) > 0:
+            return favorite_quesions
+        
+        print(f"🤖 Fetching problems from Favourite List: https://leetcode.com/problem/{favorite_slug}/...")
+        
+        query = '''
+        query favoriteQuestionList(
+            $favoriteSlug: String!, 
+            $filter: FavoriteQuestionFilterInput, 
+            $filtersV2: QuestionFilterInput, 
+            $searchKeyword: String, 
+            $sortBy: QuestionSortByInput, 
+            $limit: Int, 
+            $skip: Int, 
+            $version: String = "v2"
+        ) {
+            favoriteQuestionList(
+                favoriteSlug: $favoriteSlug
+                filter: $filter
+                filtersV2: $filtersV2
+                searchKeyword: $searchKeyword
+                sortBy: $sortBy
+                limit: $limit
+                skip: $skip
+                version: $version
+            ) {
+                questions {
+                    id
+                    title
+                    titleSlug
+                    difficulty
+                    status
+                    acRate
+                    topicTags {
+                        name
+                        slug
+                    }
+                }
+                totalLength
+                hasMore
+            }
+        }
+        '''
+
+        variables = {
+            "favoriteSlug": favorite_slug,
+            "limit": limit,
+            "skip": skip,
+            "filtersV2": {
+                "filterCombineType": "ALL",
+                "statusFilter": {"questionStatuses": [], "operator": "IS"},
+                "difficultyFilter": {"difficulties": [], "operator": "IS"},
+                "topicFilter": {"topicSlugs": [], "operator": "IS"}
+            },
+            "sortBy": {"sortField": "CUSTOM", "sortOrder": "ASCENDING"},
+            "searchKeyword": ""
+        }
+
+        query_params = {
+            "operationName": "favoriteQuestionList",
+            "variables": variables, 
+            "query": query, 
+        }
+
+        response = self.session.post(
+            GRAPHQL_URL,
+            data=json.dumps(query_params).encode('utf8'),
+            headers={"content-type": "application/json"})
+        
+        body = json.loads(response.content)
+        
+        # parse data
+        questions = get(body, 'data.favoriteQuestionList.questions')
+        for question in questions:
+            FavouriteQuestionList.replace(
+                slug=question['titleSlug'],
+                status=question['status'],
+                title=question['title'],
+            ).execute()
+        
+        print(f"🤖 Number of Favourite {len(questions)} problems")
+        return questions    
+        
+
+    def fetch_accepted_problems(self): 
+        favourite_questions = self.fetch_favourite_problems('2x3zd082', 0, 430)
+        
         response = self.session.get("https://leetcode.com/api/problems/all/")
         all_problems = json.loads(response.content.decode('utf-8'))
         # filter AC problems
@@ -84,7 +173,7 @@ class LeetCodeCrawler:
             if item['status'] == 'ac':
                 id, slug = destructure(item['stat'], "question_id", "question__title_slug")
 
-                if slug != 'permutation-in-string':
+                if slug not in set(favourite_questions):
                     continue
 
                 # only update problem if not exists
@@ -212,7 +301,6 @@ class LeetCodeCrawler:
         
         if is_solution_existed:
             data = self.decompose_note(solution['note'])
-            print(data)
             Problem.update({
                  Problem.approaches:data['approaches'],
                  Problem.mistakes:data['mistakes'],
@@ -221,11 +309,11 @@ class LeetCodeCrawler:
                  Problem.note:data['note'],
             }).where(Problem.slug == slug).execute()
             
-            Solution.replace(
-                problem=solution['questionId'],
-                url=f"https://leetcode.com/articles/{slug}/",
-                content=solution['solution']['content']
-            ).execute()
+            # Solution.replace(
+            #     problem=solution['questionId'],
+            #     url=f"https://leetcode.com/articles/{slug}/",
+            #     content=solution['solution']['content']
+            # ).execute()
         
         random_wait(10, 15)
 
@@ -358,29 +446,50 @@ class LeetCodeCrawler:
                     continue
 
                 if sub['statusDisplay'] == 'Accepted':
-                    url = sub['url']
-                    self.browser.get(f'https://leetcode.com{url}')
-                    element = WebDriverWait(self.browser, 10).until(
-                        EC.presence_of_element_located((By.ID, "result_date"))  # Replace "someId" with the ID of the actual element you are waiting for
-                    )
-                    html = self.browser.page_source
-                    pattern = re.compile(
-                        r'submissionCode: \'(?P<code>.*)\',\n  editCodeUrl', re.S
-                    )
-                    matched = pattern.search(html)
-                    code = matched.groupdict().get('code') if matched else None
+                    id = sub['id']
+                        
+                    code = self.fetch_submission_details(id)
+                    
                     if code:
                         Submission.insert(
                             id=sub['id'],
                             slug=slug,
                             language=sub['lang'],
-                            created=sub['timestamp'],
-                            source=code.encode('utf-8')
+                            submitted_date=datetime.fromtimestamp(int(sub['timestamp'])),
+                            source=code
                         ).execute()
                     else:
                         raise Exception(f"Cannot get submission code for problem: {slug}")
+                    
+                    print(f"✅ Successfully saved accepted submission for: {slug}")
+                    break  # Stop after saving the first accepted submission
         
         random_wait(10, 15)
+        
+    def fetch_submission_details(self, submission_id):
+        print(f"🖍 Fetching submission details code for problem: {submission_id}")
+        
+        query_params = {
+            'operationName': "submissionDetails",
+            'variables': {
+                "submissionId": submission_id, 
+            },
+            'query': '''query submissionDetails($submissionId: Int!) {
+                submissionDetails(submissionId: $submissionId) {
+                    code
+                    timestamp
+                }
+            }'''
+        }
+        
+        response = self.session.post(
+            GRAPHQL_URL,
+            data=json.dumps(query_params).encode('utf8'),
+            headers={"content-type": "application/json"},
+        )
+
+        body = json.loads(response.content)
+        return get(body, "data.submissionDetails.code")
 
 
 if __name__ == '__main__':

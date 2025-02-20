@@ -63,7 +63,7 @@ class Submission(BaseModel):
     slug = ForeignKeyField(Problem, 'slug', backref='submissions')
     language = CharField()
     source = TextField()
-    created = DateField()
+    submitted_date = DateTimeField()
 
 
 class Tag(BaseModel):
@@ -95,10 +95,10 @@ class ProblemTag(BaseModel):
 
 
 class FavouriteQuestionList(BaseModel):
-    title = CharField()
-    slug = CharField(unique=True)
-    category_name = TextField()
-
+    slug = ForeignKeyField(Problem, 'slug', backref='favouritequestionlists')
+    status = CharField()
+    title = TextField()
+    
 
 class Solution(BaseModel):
     problem = ForeignKeyField(Problem, primary_key=True)
