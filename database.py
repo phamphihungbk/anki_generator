@@ -31,6 +31,13 @@ class Problem(BaseModel):
     slug = CharField(unique=True)
     description = TextField()
     accepted = BooleanField()
+    
+    # editable field from user
+    approaches = TextField()
+    mistakes = TextField()
+    edgecases = TextField()
+    clarify_questions = TextField()
+    note = TextField()
 
     # find the tags related to this question
     @property
@@ -87,6 +94,12 @@ class ProblemTag(BaseModel):
         )
 
 
+class FavouriteQuestionList(BaseModel):
+    title = CharField()
+    slug = CharField(unique=True)
+    category_name = TextField()
+
+
 class Solution(BaseModel):
     problem = ForeignKeyField(Problem, primary_key=True)
     content = TextField()
@@ -95,7 +108,7 @@ class Solution(BaseModel):
 
 def create_tables():
     with database:
-        database.create_tables([Problem, Solution, Submission, Tag, ProblemTag])
+        database.create_tables([Problem, Solution, Submission, Tag, ProblemTag, FavouriteQuestionList])
 
 
 if __name__ == '__main__':

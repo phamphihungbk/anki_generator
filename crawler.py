@@ -16,7 +16,7 @@ from database import Problem, ProblemTag, Tag, Submission, create_tables, Soluti
 from utils import destructure, random_wait, do, get
 
 COOKIE_PATH = "./cookies.dat"
-
+GRAPHQL_URL = "https://leetcode.com/graphql"
 
 class LeetCodeCrawler:
     def __init__(self):
@@ -51,8 +51,10 @@ class LeetCodeCrawler:
                 WebDriverWait(self.browser, 24 * 60 * 3600).until(
                     lambda driver: driver.current_url.find("login") < 0
                 )
-                # wait for 2FA
+
+                # Wait for user to complete 2FA manually
                 time.sleep(10)
+
                 browser_cookies = self.browser.get_cookies()
                 with open(COOKIE_PATH, 'wb') as f:
                     pickle.dump(browser_cookies, f)
@@ -73,46 +75,7 @@ class LeetCodeCrawler:
 
         self.session.cookies.update(cookies)
 
-    def fetch_problem_list(self, url):
-        self.browser.get(url)
-
-        # Wait until at least one problem link is visible
-        try:
-            WebDriverWait(self.browser, 20).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "a[href^='/problems/']"))
-            )
-        except Exception as e:
-            print(f"❌ Timeout error: Could not find problems. Check the website structure: {e}")
-            return []
-
-        # Scroll down to load all problems
-        last_height = self.browser.execute_script("return document.body.scrollHeight")
-        
-        while True:
-            self.browser.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(2)  # Wait for new questions to load
-            
-            new_height = self.browser.execute_script("return document.body.scrollHeight")
-            if new_height == last_height:
-                break  # Stop when no more content is loading
-            last_height = new_height
-
-        # Get all question elements
-        question_elements = self.browser.find_elements(By.CSS_SELECTOR, "a[href^='/problems/']")
-        
-        # Extract slugs from href attributes
-        slugs = [elem.get_attribute("href").split("/problems/")[1].split("?")[0] for elem in question_elements]
-        
-        print(f"✅ Found {len(slugs)} questions from the problem list!")
-        return slugs
-
-    def fetch_accepted_problems(self):
-        # URL of the problem list
-        problem_list_url = "https://leetcode.com/problem-list/2x3zd082/"
-    
-        # Fetch all question slugs from the page
-        question_slugs = self.fetch_problem_list(problem_list_url)
-        
+    def fetch_accepted_problems(self):    
         response = self.session.get("https://leetcode.com/api/problems/all/")
         all_problems = json.loads(response.content.decode('utf-8'))
         # filter AC problems
@@ -120,7 +83,8 @@ class LeetCodeCrawler:
         for item in all_problems['stat_status_pairs']:
             if item['status'] == 'ac':
                 id, slug = destructure(item['stat'], "question_id", "question__title_slug")
-                if slug not in set(question_slugs):
+
+                if slug != 'permutation-in-string':
                     continue
 
                 # only update problem if not exists
@@ -130,13 +94,14 @@ class LeetCodeCrawler:
                     do(self.fetch_problem, args=[slug, True])
                     # fetch solution
                     do(self.fetch_solution, args=[slug])
-
+                    
                 # always try to update submission
                 do(self.fetch_submission, args=[slug])
         print(f"🤖 Updated {counter} problems")
 
-    def fetch_problem(self, slug, accepted=False):
+    def fetch_problem(self, slug: str, accepted: bool=False) -> None:
         print(f"🤖 Fetching problem: https://leetcode.com/problem/{slug}/...")
+        
         query_params = {
             'operationName': "getQuestionDetail",
             'variables': {'titleSlug': slug},
@@ -159,21 +124,29 @@ class LeetCodeCrawler:
                 }'''
         }
 
-        resp = self.session.post(
-            "https://leetcode.com/graphql",
+        response = self.session.post(
+            GRAPHQL_URL,
             data=json.dumps(query_params).encode('utf8'),
-            headers={
-                "content-type": "application/json",
-            })
-        body = json.loads(resp.content)
+            headers={"content-type": "application/json"})
+        
+        body = json.loads(response.content)
 
         # parse data
         question = get(body, 'data.question')
 
         Problem.replace(
-            id=question['questionId'], display_id=question['questionFrontendId'], title=question["questionTitle"],
-            level=question["difficulty"], slug=slug, description=question['content'],
-            accepted=accepted
+            id=question['questionId'], 
+            display_id=question['questionFrontendId'],
+            title=question["questionTitle"],
+            level=question["difficulty"], 
+            slug=slug, 
+            description=question['content'],
+            accepted=accepted,
+            approaches='',
+            mistakes='',
+            edgecases='',
+            clarify_questions='',
+            note='',
         ).execute()
 
         for item in question['topicTags']:
@@ -187,10 +160,12 @@ class LeetCodeCrawler:
                 problem=question['questionId'],
                 tag=item['slug']
             ).execute()
+        
         random_wait(10, 15)
 
-    def fetch_solution(self, slug):
+    def fetch_solution(self, slug: str) -> None:
         print(f"🤖 Fetching solution for problem: {slug}")
+        
         query_params = {
             "operationName": "QuestionNote",
             "variables": {"titleSlug": slug},
@@ -199,6 +174,7 @@ class LeetCodeCrawler:
                 question(titleSlug: $titleSlug) {
                     questionId
                     article
+                    note
                     solution {
                       id
                       content
@@ -222,53 +198,157 @@ class LeetCodeCrawler:
             }
             '''
         }
-        resp = self.session.post("https://leetcode.com/graphql",
-                                 data=json.dumps(query_params).encode('utf8'),
-                                 headers={
-                                     "content-type": "application/json",
-                                 })
-        body = json.loads(resp.content)
+
+        response = self.session.post(GRAPHQL_URL,
+            data=json.dumps(query_params).encode('utf8'),
+            headers={"content-type": "application/json"},
+        )
+        
+        body = json.loads(response.content)
 
         # parse data
         solution = get(body, "data.question")
-        solutionExist = solution['solution'] is not None and solution['solution']['paidOnly'] is False
-        if solutionExist:
+        is_solution_existed = solution['solution'] is not None and solution['solution']['paidOnly'] is False
+        
+        if is_solution_existed:
+            data = self.decompose_note(solution['note'])
+            print(data)
+            Problem.update({
+                 Problem.approaches:data['approaches'],
+                 Problem.mistakes:data['mistakes'],
+                 Problem.edgecases:data['edgecases'],
+                 Problem.clarify_questions:data['clarify_questions'],
+                 Problem.note:data['note'],
+            }).where(Problem.slug == slug).execute()
+            
             Solution.replace(
                 problem=solution['questionId'],
                 url=f"https://leetcode.com/articles/{slug}/",
                 content=solution['solution']['content']
             ).execute()
+        
         random_wait(10, 15)
 
-    def fetch_submission(self, slug):
-        print(f"🤖 Fetching submission for problem: {slug}")
+
+    def decompose_note(self, input_str: str) -> dict:
+        """
+        Extracts sections (clarify questions, edgecases, approaches, mistakes, note) from the input string.
+
+        :param input_str: The input string with section headers and content.
+        :return: Dictionary with extracted content for each section.
+        """
+
+        # Improved regex pattern to capture content between section headers
+        pattern = re.compile(
+            r"clarify questions:\s*(?P<clarify>(?:- .*(?:\n|$))*)"      # Clarify Questions
+            r"(?:\nedgecases:\s*(?P<edgecase>(?:- .*(?:\n|$))*)?)?"     # Edgecases (optional)
+            r"(?:\napproaches:\s*(?P<approach>(?:- .*(?:\n|$))*)?)?"    # Approaches (optional)
+            r"(?:\nmistakes:\s*(?P<mistake>(?:- .*(?:\n|$))*)?)?"       # Mistakes (optional)
+            r"(?:\nnote:\s*(?P<note>.*))?",                             # Note (optional)
+            re.IGNORECASE
+        )
+
+        match = pattern.search(input_str)
+        if not match:
+            print("❌ No matches found. Check section headers and formatting.")
+            return {section: "None" for section in ["clarify_questions", "edgecases", "approaches", "mistakes", "note"]}
+
+        def format_title(key: str) -> str:
+            """Converts keys like 'clarify_questions' to 'Clarify Questions'."""
+            return key.replace("_", " ").title()
+
+        def format_section(title: str, text: str, is_bullet_section: bool = True) -> str:
+            """
+            Formats a section into a human-readable string.
+
+            :param title: Section title.
+            :param text: Section content.
+            :param is_bullet_section: True if the section contains bullet points; False otherwise.
+            :return: Formatted section string.
+            """
+            if not text:
+                return f"{title}:\n  - None" if is_bullet_section else f"{title}:\nNone"
+
+            lines = [line.strip('- ').strip() for line in text.strip().split('\n') if line.strip()]
+            if is_bullet_section:
+                return f"{title}:\n" + "\n".join(f"  - {line}" for line in lines)
+            else:
+                return f"{title}:\n{lines[0]}"  # For single-line content like 'note'
+        
+        # Extract, clean, and format sections
+        sections = {
+            "clarify_questions": format_section(format_title("🔹 clarify_questions"), match.group('clarify')),
+            "edgecases": format_section(format_title("🔹 edge_cases"), match.group('edgecase')),
+            "approaches": format_section(format_title("🔹 approaches"), match.group('approach'), is_bullet_section=False),
+            "mistakes": format_section(format_title("🔹 mistakes"), match.group('mistake')),
+            "note": format_section(format_title("🔹 note"), match.group('note'), is_bullet_section=False),
+        }
+
+        return sections
+    
+        """
+        Transforms decomposed notes into individually formatted strings for each attribute.
+        
+        :param decomposed_notes: Dictionary with keys: clarify_questions, edgecases, approaches, mistakes, note.
+        :return: Dictionary with formatted strings for each attribute.
+        """
+
+        def format_list_section(title: str, items: list) -> str:
+            """Formats a list into bullet points with a title."""
+            if not items:
+                return f"{title}:\n  - None"
+            formatted_items = "\n".join(f"  - {item}" for item in items)
+            return f"{title}:\n{formatted_items}"
+
+        def format_text_section(title: str, content: str) -> str:
+            """Formats text sections with a title."""
+            return f"{title}:\n{content.strip() or 'None'}"
+
+        return {
+            "clarify_questions": format_list_section("Clarify_questions", decomposed_notes["clarify_questions"]),
+            "edgecases": format_list_section("Edgecases", decomposed_notes["edgecases"]),
+            "approaches": format_text_section("Approaches", decomposed_notes["approaches"]),
+            "mistakes": format_list_section("Mistakes", decomposed_notes["mistakes"]),
+            "note": format_text_section("Note", decomposed_notes["note"])
+        }
+
+    def fetch_submission(self, slug: str) -> None:
+        print(f"🖍 Fetching submission for problem: {slug}")
+        
         query_params = {
             'operationName': "Submissions",
-            'variables': {"offset": 0, "limit": 20, "lastKey": '', "questionSlug": slug},
+            'variables': {
+                "offset": 0, 
+                "limit": 20, 
+                "lastKey": '', 
+                "questionSlug": slug
+            },
             'query': '''query Submissions($offset: Int!, $limit: Int!, $lastKey: String, $questionSlug: String!) {
-                                        submissionList(offset: $offset, limit: $limit, lastKey: $lastKey, questionSlug: $questionSlug) {
-                                        lastKey
-                                        hasNext
-                                        submissions {
-                                            id
-                                            statusDisplay
-                                            lang
-                                            runtime
-                                            timestamp
-                                            url
-                                            isPending
-                                            __typename
-                                        }
-                                        __typename
-                                    }
-                                }'''
+                submissionList(offset: $offset, limit: $limit, lastKey: $lastKey, questionSlug: $questionSlug) {
+                    lastKey
+                    hasNext
+                    submissions {
+                        id
+                        statusDisplay
+                        lang
+                        runtime
+                        timestamp
+                        url
+                        isPending
+                        __typename
+                    }
+                    __typename
+                }
+            }'''
         }
-        resp = self.session.post("https://leetcode.com/graphql",
-                                 data=json.dumps(query_params).encode('utf8'),
-                                 headers={
-                                     "content-type": "application/json",
-                                 })
-        body = json.loads(resp.content)
+        
+        response = self.session.post(
+            GRAPHQL_URL,
+            data=json.dumps(query_params).encode('utf8'),
+            headers={"content-type": "application/json"},
+        )
+
+        body = json.loads(response.content)
 
         # parse data
         submissions = get(body, "data.submissionList.submissions")
@@ -299,6 +379,7 @@ class LeetCodeCrawler:
                         ).execute()
                     else:
                         raise Exception(f"Cannot get submission code for problem: {slug}")
+        
         random_wait(10, 15)
 
 
