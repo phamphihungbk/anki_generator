@@ -32,10 +32,20 @@ This project is a script-based tool designed to fetch LeetCode questions and gen
 
 ✅ Perfect for preparing technical interviews
 
-## 🛠️ Getting Started
+## 🛠️ Installation Instructions
 
-1.	Fetch your favorite LeetCode questions using the provided script
-2.	Generate an Anki deck with structured flashcards
-3.	Import the deck into Anki and start practicing daily!
+```
+git clone https://github.com/your-username/anki-generator.git
+cd anki-generator
+
+# Install dependencies (creates virtual environment)
+poetry install
+
+# sync problem list with leetcode account
+poetry run python cli.py sync_favourite_list --slug :slug-problem-list --size :number-of-questions
+
+# generate Anki Deck with Favourite Problem List
+poetry run python cli.py generate --is_favourite 
+```
 
 ### 🚀 Practice smarter, not harder — strengthen your coding skills with spaced repetition!

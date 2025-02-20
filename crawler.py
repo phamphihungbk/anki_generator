@@ -164,8 +164,8 @@ class LeetCodeCrawler:
         # filter AC problems
         counter = 0
         for item in all_problems['stat_status_pairs']:
+            id, slug = destructure(item['stat'], "question_id", "question__title_slug")
             if FavouriteQuestionList.get_or_none(FavouriteQuestionList.slug == slug):
-                id, slug = destructure(item['stat'], "question_id", "question__title_slug")
 
                 # only update problem if not exists
                 if Problem.get_or_none(Problem.id == id) is None:
