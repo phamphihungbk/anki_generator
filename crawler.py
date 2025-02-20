@@ -76,11 +76,7 @@ class LeetCodeCrawler:
 
         self.session.cookies.update(cookies)
 
-    def fetch_favourite_problems(self, favorite_slug, skip = 0, limit = 200):
-        favorite_quesions = FavouriteQuestionList.select()
-        if len(favorite_quesions) > 0:
-            return favorite_quesions
-        
+    def fetch_favourite_list(self, favorite_slug, skip = 0, limit = 200):
         print(f"🤖 Fetching problems from Favourite List: https://leetcode.com/problem/{favorite_slug}/...")
         
         query = '''
@@ -161,20 +157,37 @@ class LeetCodeCrawler:
         print(f"🤖 Number of Favourite {len(questions)} problems")
         return questions    
         
+    def fetch_favourite_problems(self):
+        response = self.session.get("https://leetcode.com/api/problems/all/")
+       
+        all_problems = json.loads(response.content.decode('utf-8'))
+        # filter AC problems
+        counter = 0
+        for item in all_problems['stat_status_pairs']:
+            if FavouriteQuestionList.get_or_none(FavouriteQuestionList.slug == slug):
+                id, slug = destructure(item['stat'], "question_id", "question__title_slug")
+
+                # only update problem if not exists
+                if Problem.get_or_none(Problem.id == id) is None:
+                    counter += 1
+                    # fetch problem
+                    do(self.fetch_problem, args=[slug, True])
+                    # fetch solution
+                    do(self.fetch_solution, args=[slug])
+                    
+                # always try to update submission
+                do(self.fetch_submission, args=[slug])
+        print(f"🤖 Updated {counter} problems")
 
     def fetch_accepted_problems(self): 
-        favourite_questions = self.fetch_favourite_problems('2x3zd082', 0, 430)
-        
         response = self.session.get("https://leetcode.com/api/problems/all/")
+       
         all_problems = json.loads(response.content.decode('utf-8'))
         # filter AC problems
         counter = 0
         for item in all_problems['stat_status_pairs']:
             if item['status'] == 'ac':
                 id, slug = destructure(item['stat'], "question_id", "question__title_slug")
-
-                if slug not in set(favourite_questions):
-                    continue
 
                 # only update problem if not exists
                 if Problem.get_or_none(Problem.id == id) is None:

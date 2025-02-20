@@ -33,10 +33,10 @@ class Problem(BaseModel):
     accepted = BooleanField()
     
     # editable field from user
+    clarify_questions = TextField()
     approaches = TextField()
     mistakes = TextField()
     edgecases = TextField()
-    clarify_questions = TextField()
     note = TextField()
 
     # find the tags related to this question

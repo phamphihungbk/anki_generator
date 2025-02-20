@@ -48,8 +48,12 @@ def get_anki_model():
             {"name": "Description"},
             {"name": "Tags"},
             {"name": "TagSlugs"},
+            {"name": "Clarify"},
+            {"name": "Approach"},
+            {"name": "Edgecase"},
+            {"name": "Mistake"},
+            {"name": "Note"},
             {"name": "Solution"},
-            {"name": "Submission"}
         ],
         templates=[
             {
@@ -90,6 +94,11 @@ def make_note(problem):
             problem.description,
             tags,
             tags_slug,
+            problem.clarify_questions,
+            problem.approaches,
+            problem.edgecases,
+            problem.mistakes,
+            problem.note,
             markdown_to_html(solution.content) if solution else "",
             submissions
         ],
