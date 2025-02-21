@@ -47,5 +47,10 @@ poetry run python cli.py sync_favourite_list --slug :slug-problem-list --size :n
 # generate Anki Deck with Favourite Problem List
 poetry run python cli.py generate --is_favourite 
 ```
+## 🛠️ Demo
+
+![front](./demo/front.png)
+![back](./demo/back.png)
+
 
 ### 🚀 Practice smarter, not harder — strengthen your coding skills with spaced repetition!

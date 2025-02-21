@@ -1,3 +1,4 @@
+from datetime import datetime
 import logging
 import pathlib
 
@@ -38,6 +39,8 @@ class Problem(BaseModel):
     mistakes = TextField()
     edgecases = TextField()
     note = TextField()
+    create_time = DateTimeField(default=datetime.now)
+    update_time = DateTimeField(default=datetime.now)
 
     # find the tags related to this question
     @property
@@ -64,6 +67,8 @@ class Submission(BaseModel):
     language = CharField()
     source = TextField()
     submitted_date = DateTimeField()
+    create_time = DateTimeField(default=datetime.now)
+    update_time = DateTimeField(default=datetime.now)
 
 
 class Tag(BaseModel):
@@ -98,6 +103,8 @@ class FavouriteQuestionList(BaseModel):
     slug = ForeignKeyField(Problem, 'slug', backref='favouritequestionlists')
     status = CharField()
     title = TextField()
+    create_time = DateTimeField(default=datetime.now)
+    update_time = DateTimeField(default=datetime.now)
     
 
 class Solution(BaseModel):

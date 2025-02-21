@@ -11,9 +11,9 @@ from requests.cookies import RequestsCookieJar
 from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as EC
+# from selenium.webdriver.support import expected_conditions as EC
 
-from database import Problem, ProblemTag, Tag, Submission, create_tables, Solution, FavouriteQuestionList
+from database import Problem, ProblemTag, Tag, Submission, FavouriteQuestionList
 from utils import destructure, random_wait, do, get
 
 COOKIE_PATH = "./cookies.dat"
@@ -137,16 +137,11 @@ class LeetCodeCrawler:
             "variables": variables, 
             "query": query, 
         }
-
-        response = self.session.post(
-            GRAPHQL_URL,
-            data=json.dumps(query_params).encode('utf8'),
-            headers={"content-type": "application/json"})
         
-        body = json.loads(response.content)
+        res = self.fetch(query_params)
         
         # parse data
-        questions = get(body, 'data.favoriteQuestionList.questions')
+        questions = get(res, 'data.favoriteQuestionList.questions')
         for question in questions:
             FavouriteQuestionList.replace(
                 slug=question['titleSlug'],
@@ -208,33 +203,28 @@ class LeetCodeCrawler:
             'operationName': "getQuestionDetail",
             'variables': {'titleSlug': slug},
             'query': '''query getQuestionDetail($titleSlug: String!) {
-                        question(titleSlug: $titleSlug) {
-                            questionId
-                            questionFrontendId
-                            questionTitle
-                            questionTitleSlug
-                            content
-                            difficulty
-                            stats
-                            similarQuestions
-                            categoryTitle
-                            topicTags {
-                            name
-                            slug
-                        }
+                question(titleSlug: $titleSlug) {
+                    questionId
+                    questionFrontendId
+                    questionTitle
+                    questionTitleSlug
+                    content
+                    difficulty
+                    stats
+                    similarQuestions
+                    categoryTitle
+                    topicTags {
+                        name
+                        slug
                     }
-                }'''
+                }
+            }'''
         }
-
-        response = self.session.post(
-            GRAPHQL_URL,
-            data=json.dumps(query_params).encode('utf8'),
-            headers={"content-type": "application/json"})
         
-        body = json.loads(response.content)
+        res = self.fetch(query_params)
 
         # parse data
-        question = get(body, 'data.question')
+        question = get(res, 'data.question')
 
         Problem.replace(
             id=question['questionId'], 
@@ -300,16 +290,11 @@ class LeetCodeCrawler:
             }
             '''
         }
-
-        response = self.session.post(GRAPHQL_URL,
-            data=json.dumps(query_params).encode('utf8'),
-            headers={"content-type": "application/json"},
-        )
         
-        body = json.loads(response.content)
+        res = self.fetch(query_params)
 
         # parse data
-        solution = get(body, "data.question")
+        solution = get(res, "data.question")
         is_solution_existed = solution['solution'] is not None and solution['solution']['paidOnly'] is False
         
         if is_solution_existed:
@@ -351,7 +336,7 @@ class LeetCodeCrawler:
 
         match = pattern.search(input_str)
         if not match:
-            print("❌ No matches found. Check section headers and formatting.")
+            print("❌ Personal not could not be found.")
             return {section: "None" for section in ["clarify_questions", "edgecases", "approaches", "mistakes", "note"]}
 
         def format_title(key: str) -> str:
@@ -386,32 +371,6 @@ class LeetCodeCrawler:
         }
 
         return sections
-    
-        """
-        Transforms decomposed notes into individually formatted strings for each attribute.
-        
-        :param decomposed_notes: Dictionary with keys: clarify_questions, edgecases, approaches, mistakes, note.
-        :return: Dictionary with formatted strings for each attribute.
-        """
-
-        def format_list_section(title: str, items: list) -> str:
-            """Formats a list into bullet points with a title."""
-            if not items:
-                return f"{title}:\n  - None"
-            formatted_items = "\n".join(f"  - {item}" for item in items)
-            return f"{title}:\n{formatted_items}"
-
-        def format_text_section(title: str, content: str) -> str:
-            """Formats text sections with a title."""
-            return f"{title}:\n{content.strip() or 'None'}"
-
-        return {
-            "clarify_questions": format_list_section("Clarify_questions", decomposed_notes["clarify_questions"]),
-            "edgecases": format_list_section("Edgecases", decomposed_notes["edgecases"]),
-            "approaches": format_text_section("Approaches", decomposed_notes["approaches"]),
-            "mistakes": format_list_section("Mistakes", decomposed_notes["mistakes"]),
-            "note": format_text_section("Note", decomposed_notes["note"])
-        }
 
     def fetch_submission(self, slug: str) -> None:
         print(f"🖍 Fetching submission for problem: {slug}")
@@ -443,16 +402,10 @@ class LeetCodeCrawler:
             }'''
         }
         
-        response = self.session.post(
-            GRAPHQL_URL,
-            data=json.dumps(query_params).encode('utf8'),
-            headers={"content-type": "application/json"},
-        )
-
-        body = json.loads(response.content)
+        res = self.fetch(query_params)
 
         # parse data
-        submissions = get(body, "data.submissionList.submissions")
+        submissions = get(res, "data.submissionList.submissions")
         if len(submissions) > 0:
             for sub in submissions:
                 if Submission.get_or_none(Submission.id == sub['id']) is not None:
@@ -494,19 +447,15 @@ class LeetCodeCrawler:
                 }
             }'''
         }
-        
+
+        res = self.fetch(query_params)
+        return get(res, "data.submissionDetails.code")
+
+    def fetch(self, query_params):
         response = self.session.post(
             GRAPHQL_URL,
             data=json.dumps(query_params).encode('utf8'),
             headers={"content-type": "application/json"},
         )
 
-        body = json.loads(response.content)
-        return get(body, "data.submissionDetails.code")
-
-
-if __name__ == '__main__':
-    create_tables()
-    crawler = LeetCodeCrawler()
-    crawler.login()
-    crawler.fetch_accepted_problems()
+        return json.loads(response.content)

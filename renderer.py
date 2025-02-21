@@ -53,7 +53,7 @@ def get_anki_model():
             {"name": "Edgecase"},
             {"name": "Mistake"},
             {"name": "Note"},
-            {"name": "Solution"},
+            {"name": "Submission"},
         ],
         templates=[
             {
@@ -99,7 +99,7 @@ def make_note(problem):
             problem.edgecases,
             problem.mistakes,
             problem.note,
-            markdown_to_html(solution.content) if solution else "",
+            # markdown_to_html(solution.content) if solution else "",
             submissions
         ],
         guid=str(problem.display_id),
