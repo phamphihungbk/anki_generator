@@ -34,7 +34,7 @@ def fetch_favourite_questions(slug: str, size: int):
     
 
 @cli.command()
-@click.option('--slug', type=click.Choice(['amazon-all', 'google-all', 'facebook-all', 'microsoft-all']), prompt='The company slug')
+@click.option('--slug', type=click.Choice(['amazon-all', 'google-all', 'facebook-all', 'microsoft-all', 'amazon-three-months','google-three-months', 'facebook-three-months', 'microsoft-three-months']), prompt='The company slug')
 @click.option('--size', type=int, prompt='Number of item want to fetch.')
 def fetch_top_questions(slug: str, size: int):
     worker = LeetCodeCrawler()

@@ -227,7 +227,7 @@ class LeetCodeCrawler:
                 title=f'{question['id']}. {question['title']}',
                 slug=question['titleSlug'],
                 status=question['status'],
-                company=company_slug[:-4],
+                company=company_slug[:-4].split('-')[0],
                 frequency=question['frequency'],
             ).execute()
         
