@@ -4,7 +4,7 @@ import re
 from genanki import Model, Deck, Note, Package
 from markdown import markdown
 
-from database import Problem
+from database import ProblemDetail
 from utils import parser as conf
 
 
@@ -110,8 +110,8 @@ def make_note(problem):
 
 
 def render_anki():
-    problems = Problem.select().order_by(
-        Problem.display_id
+    problems = ProblemDetail.select().order_by(
+        ProblemDetail.display_id
     )
 
     anki_deck = Deck(

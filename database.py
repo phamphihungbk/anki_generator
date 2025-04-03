@@ -4,6 +4,7 @@ import pathlib
 
 from peewee import *
 
+
 from utils import parser
 
 if parser.get("DB", "debug") == "True":
@@ -24,8 +25,10 @@ class BaseModel(Model):
     class Meta:
         database = database
 
-
-class Problem(BaseModel):
+# --------------------------
+# Core Problem Definitions
+# --------------------------
+class ProblemDetail(BaseModel):
     display_id = IntegerField(unique=True)
     level = CharField()
     title = CharField()
@@ -61,9 +64,11 @@ class Problem(BaseModel):
             )
         )
 
-
+# --------------------------
+# Submissions and Solutions
+# --------------------------
 class Submission(BaseModel):
-    slug = ForeignKeyField(Problem, 'slug', backref='submissions')
+    slug = ForeignKeyField(ProblemDetail, 'slug', backref='submissions')
     language = CharField()
     source = TextField()
     submitted_date = DateTimeField()
@@ -71,6 +76,9 @@ class Submission(BaseModel):
     update_time = DateTimeField(default=datetime.now)
 
 
+# --------------------------
+# Tags and Mapping Table
+# --------------------------
 class Tag(BaseModel):
     name = CharField()
     slug = CharField(unique=True, primary_key=True)
@@ -78,18 +86,18 @@ class Tag(BaseModel):
     @property
     def problems(self):
         return (
-            Problem.select().join(
-                ProblemTag, on=Problem.id == ProblemTag.problem
+            ProblemDetail.select().join(
+                ProblemTag, on=ProblemDetail.id == ProblemTag.problem
             ).where(
                 ProblemTag.tag == self.slug
             ).order_by(
-                Problem.id
+                ProblemDetail.id
             )
         )
 
 
 class ProblemTag(BaseModel):
-    problem = ForeignKeyField(Problem)
+    problem = ForeignKeyField(ProblemDetail)
     tag = ForeignKeyField(Tag)
 
     class Meta:
@@ -99,23 +107,42 @@ class ProblemTag(BaseModel):
         )
 
 
-class FavouriteQuestionList(BaseModel):
-    slug = ForeignKeyField(Problem, 'slug', backref='favouritequestionlists')
+# --------------------------
+# Personal List Management
+# --------------------------
+class FavouriteQuestion(BaseModel):
+    title = TextField()
+    slug = ForeignKeyField(ProblemDetail, 'slug', backref='favouritequestions')
     status = CharField()
     title = TextField()
-    create_time = DateTimeField(default=datetime.now)
-    update_time = DateTimeField(default=datetime.now)
     
 
+# table to store submission list
 class Solution(BaseModel):
-    problem = ForeignKeyField(Problem, primary_key=True)
+    problem = ForeignKeyField(ProblemDetail, primary_key=True)
     content = TextField()
     url = CharField()
 
 
+# --------------------------
+# Top Ranking by Company
+# --------------------------
+class TopQuestion(BaseModel):
+    title = CharField()
+    slug = ForeignKeyField(ProblemDetail, 'slug', backref='topquestions')
+    status = CharField(null = False)
+    company = CharField()
+    frequency = FloatField()
+
+
+class LeetCodeTrack(BaseModel):
+    title = CharField()
+    status = CharField()
+
+
 def create_tables():
     with database:
-        database.create_tables([Problem, Solution, Submission, Tag, ProblemTag, FavouriteQuestionList])
+        database.create_tables([ProblemDetail, Solution, Submission, Tag, ProblemTag, FavouriteQuestion, TopQuestion, LeetCodeTrack])
 
 
 if __name__ == '__main__':

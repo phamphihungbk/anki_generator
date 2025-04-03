@@ -11,9 +11,8 @@ from requests.cookies import RequestsCookieJar
 from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
-# from selenium.webdriver.support import expected_conditions as EC
 
-from database import Problem, ProblemTag, Tag, Submission, FavouriteQuestionList
+from database import ProblemDetail, ProblemTag, Tag, Submission, create_tables, Solution, FavouriteQuestion, TopQuestion
 from utils import destructure, random_wait, do, get
 
 COOKIE_PATH = "./cookies.dat"
@@ -76,8 +75,8 @@ class LeetCodeCrawler:
 
         self.session.cookies.update(cookies)
 
-    def fetch_favourite_list(self, favorite_slug, skip = 0, limit = 200):
-        print(f"🤖 Fetching problems from Favourite List: https://leetcode.com/problem/{favorite_slug}/...")
+    def fetch_favourite_questions(self, slug, skip = 0, limit = 200):
+        print(f"🤖 Fetching problems from Favourite List: https://leetcode.com/problem/{slug}/...")
         
         query = '''
         query favoriteQuestionList(
@@ -119,7 +118,7 @@ class LeetCodeCrawler:
         '''
 
         variables = {
-            "favoriteSlug": favorite_slug,
+            "favoriteSlug": slug,
             "limit": limit,
             "skip": skip,
             "filtersV2": {
@@ -143,7 +142,7 @@ class LeetCodeCrawler:
         # parse data
         questions = get(res, 'data.favoriteQuestionList.questions')
         for question in questions:
-            FavouriteQuestionList.replace(
+            FavouriteQuestion.replace(
                 slug=question['titleSlug'],
                 status=question['status'],
                 title=question['title'],
@@ -152,7 +151,91 @@ class LeetCodeCrawler:
         print(f"🤖 Number of Favourite {len(questions)} problems")
         return questions    
         
-    def fetch_favourite_problems(self):
+    def fetch_top_questions_by_company(self, company_slug: str, skip = 0, limit = 200):
+        print(f"🤖 Fetching problems from Company List: https://leetcode.com/problem/{company_slug}/...")
+        
+        query = '''
+        query favoriteQuestionList(
+            $favoriteSlug: String!, 
+            $filter: FavoriteQuestionFilterInput, 
+            $filtersV2: QuestionFilterInput, 
+            $searchKeyword: String, 
+            $sortBy: QuestionSortByInput, 
+            $limit: Int, 
+            $skip: Int, 
+            $version: String = "v2"
+        ) {
+            favoriteQuestionList(
+                favoriteSlug: $favoriteSlug
+                filter: $filter
+                filtersV2: $filtersV2
+                searchKeyword: $searchKeyword
+                sortBy: $sortBy
+                limit: $limit
+                skip: $skip
+                version: $version
+            ) {
+                questions {
+                    id
+                    title
+                    titleSlug
+                    difficulty
+                    status
+                    acRate
+                    topicTags {
+                        name
+                        slug
+                    }
+                }
+                totalLength
+                hasMore
+            }
+        }
+        '''
+
+        variables = {
+            "favoriteSlug": company_slug,
+            "limit": limit,
+            "skip": skip,
+            "filtersV2": {
+                "filterCombineType": "ALL",
+                "statusFilter": {"questionStatuses": [], "operator": "IS"},
+                "difficultyFilter": {"difficulties": [], "operator": "IS"},
+                "topicFilter": {"topicSlugs": [], "operator": "IS"}
+            },
+            "sortBy": {"sortField": "FREQUENCY", "sortOrder": "DESCENDING"},
+            "searchKeyword": ""
+        }
+
+        query_params = {
+            "operationName": "favoriteQuestionList",
+            "variables": variables, 
+            "query": query, 
+        }
+
+        response = self.session.post(
+            GRAPHQL_URL,
+            data=json.dumps(query_params).encode('utf8'),
+            headers={"content-type": "application/json"})
+        
+        body = json.loads(response.content)
+        
+        # parse data
+        questions = get(body, 'data.favoriteQuestionList.questions')
+        for question in questions:
+            TopQuestion.replace(
+                title=f'{question['id']}. {question['title']}',
+                slug=question['titleSlug'],
+                status=question['status'],
+                company=company_slug[:-4],
+                frequency=question['frequency'],
+            ).execute()
+        
+        print(f"🤖 Number of Company {len(questions)} problems")
+        return questions    
+            
+        
+    def fetch_favourite_problems(self, contain_solution: bool):
         response = self.session.get("https://leetcode.com/api/problems/all/")
        
         all_problems = json.loads(response.content.decode('utf-8'))
@@ -160,18 +243,20 @@ class LeetCodeCrawler:
         counter = 0
         for item in all_problems['stat_status_pairs']:
             id, slug = destructure(item['stat'], "question_id", "question__title_slug")
-            if FavouriteQuestionList.get_or_none(FavouriteQuestionList.slug == slug):
+            if FavouriteQuestion.get_or_none(FavouriteQuestion.slug == slug):    
 
                 # only update problem if not exists
-                if Problem.get_or_none(Problem.id == id) is None:
+                if ProblemDetail.get_or_none(ProblemDetail.id == id) is None:
                     counter += 1
                     # fetch problem
                     do(self.fetch_problem, args=[slug, True])
                     # fetch solution
-                    do(self.fetch_solution, args=[slug])
+                    if contain_solution:
+                        do(self.fetch_solution, args=[slug])
                     
                 # always try to update submission
-                do(self.fetch_submission, args=[slug])
+                if contain_solution:
+                    do(self.fetch_submission, args=[slug])
         print(f"🤖 Updated {counter} problems")
 
     def fetch_accepted_problems(self): 
@@ -185,7 +270,7 @@ class LeetCodeCrawler:
                 id, slug = destructure(item['stat'], "question_id", "question__title_slug")
 
                 # only update problem if not exists
-                if Problem.get_or_none(Problem.id == id) is None:
+                if ProblemDetail.get_or_none(ProblemDetail.id == id) is None:
                     counter += 1
                     # fetch problem
                     do(self.fetch_problem, args=[slug, True])
@@ -226,7 +311,7 @@ class LeetCodeCrawler:
         # parse data
         question = get(res, 'data.question')
 
-        Problem.replace(
+        ProblemDetail.replace(
             id=question['questionId'], 
             display_id=question['questionFrontendId'],
             title=question["questionTitle"],
@@ -299,13 +384,13 @@ class LeetCodeCrawler:
         
         if is_solution_existed:
             data = self.decompose_note(solution['note'])
-            Problem.update({
-                 Problem.approaches:data['approaches'],
-                 Problem.mistakes:data['mistakes'],
-                 Problem.edgecases:data['edgecases'],
-                 Problem.clarify_questions:data['clarify_questions'],
-                 Problem.note:data['note'],
-            }).where(Problem.slug == slug).execute()
+            ProblemDetail.update({
+                 ProblemDetail.approaches:data['approaches'],
+                 ProblemDetail.mistakes:data['mistakes'],
+                 ProblemDetail.edgecases:data['edgecases'],
+                 ProblemDetail.clarify_questions:data['clarify_questions'],
+                 ProblemDetail.note:data['note'],
+            }).where(ProblemDetail.slug == slug).execute()
             
             # Solution.replace(
             #     problem=solution['questionId'],

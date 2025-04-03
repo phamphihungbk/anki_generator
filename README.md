@@ -22,35 +22,25 @@ This project is a script-based tool designed to fetch LeetCode questions and gen
 ✅ Simple CLI for generating and updating decks
 
 
-## 🎯 Why Use This Project?
-
-✅ Combines active recall with spaced repetition for better retention
-
-✅ Helps you track your LeetCode progress in Anki
-
-✅ Saves time from manually creating flashcards
-
-✅ Perfect for preparing technical interviews
-
 ## 🛠️ Installation Instructions
 
-```
+```bash
 git clone https://github.com/your-username/anki-generator.git
 cd anki-generator
 
 # Install dependencies (creates virtual environment)
 poetry install
 
-# sync problem list with leetcode account
-poetry run python cli.py sync_favourite_list --slug :slug-problem-list --size :number-of-questions
-
-# generate Anki Deck with Favourite Problem List
-poetry run python cli.py generate --is_favourite 
+# List the available commands:
+poetry run python cli.py fetch-favourite-questions
+poetry run python cli.py fetch_question_detail
+poetry run python cli.py fetch-top-questions
+poetry run python cli.py sync-leetcode-track
+poetry run python cli.py generate-deck
 ```
+
+
 ## 🛠️ Demo
 
 ![front](./demo/front.png)
 ![back](./demo/back.png)
-
-
-### 🚀 Practice smarter, not harder — strengthen your coding skills with spaced repetition!
