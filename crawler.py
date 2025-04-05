@@ -224,7 +224,7 @@ class LeetCodeCrawler:
         questions = get(body, 'data.favoriteQuestionList.questions')
         for question in questions:
             TopQuestion.replace(
-                title=f'{question['id']}. {question['title']}',
+                title=f'{question['questionFrontendId']}. {question['title']}',
                 slug=question['titleSlug'],
                 status=question['status'],
                 company=company_slug[:-4].split('-')[0],
