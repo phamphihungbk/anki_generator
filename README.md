@@ -25,7 +25,7 @@ This project is a script-based tool designed to fetch LeetCode questions and gen
 ## 🛠️ Installation Instructions
 
 ```bash
-git clone https://github.com/your-username/anki-generator.git
+git clone https://github.com/phamphihungbk/anki_generator
 cd anki-generator
 
 # Install dependencies (creates virtual environment)
