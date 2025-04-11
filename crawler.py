@@ -145,7 +145,7 @@ class LeetCodeCrawler:
             FavouriteQuestion.replace(
                 slug=question['titleSlug'],
                 status=question['status'],
-                title=question['title'],
+                title=f'{question['questionFrontendId']}. {question['title']}',
             ).execute()
         
         print(f"🤖 Number of Favourite {len(questions)} problems")
@@ -223,6 +223,8 @@ class LeetCodeCrawler:
         # parse data
         questions = get(body, 'data.favoriteQuestionList.questions')
         for question in questions:
+            if not question['topicTags']:
+                continue
             TopQuestion.replace(
                 title=f'{question['questionFrontendId']}. {question['title']}',
                 slug=question['titleSlug'],

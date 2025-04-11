@@ -138,6 +138,7 @@ class TopQuestion(BaseModel):
 class LeetCodeTrack(BaseModel):
     title = CharField()
     status = CharField()
+    # simlar_questions = 
 
 
 def create_tables():

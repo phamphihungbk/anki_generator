@@ -12,6 +12,6 @@ class CSVProcessor:
             for row in reader:
                 LeetCodeTrack.replace(
                     title=row['Problem'],
-                    status='TO_DO'
+                    status='TO_DO' if not row['Side Note'] else 'REVISIT'
                 ).execute()
                 
